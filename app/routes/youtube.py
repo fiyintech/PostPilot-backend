@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from googleapiclient.discovery import build
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ from app.auth.youtube import create_flow
 from app.database import SessionLocal
 from app.models import YouTubeAccount
 
+
 router = APIRouter(
     prefix="/auth/youtube",
     tags=["YouTube"],
@@ -14,7 +15,7 @@ router = APIRouter(
 
 
 @router.get("/login")
-def youtube_login():
+def youtube_login(request: Request):
 
     flow = create_flow()
 
@@ -24,17 +25,44 @@ def youtube_login():
         prompt="consent",
     )
 
-    return RedirectResponse(authorization_url)
+    request.session["youtube_state"] = state
+    request.session["youtube_code_verifier"] = flow.code_verifier
+
+    return RedirectResponse(
+        authorization_url
+    )
 
 
 @router.get("/callback")
-def youtube_callback(code: str):
+def youtube_callback(
+    request: Request,
+    code: str | None = None
+):
+
+    if not code:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing OAuth authorization code."
+        )
 
     flow = create_flow()
 
-    flow.fetch_token(code=code)
+    flow.code_verifier = request.session.get(
+        "youtube_code_verifier"
+    )
+
+    if not flow.code_verifier:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing OAuth code verifier. Restart login."
+        )
+
+    flow.fetch_token(
+        code=code
+    )
 
     credentials = flow.credentials
+
 
     youtube = build(
         "youtube",
@@ -42,20 +70,25 @@ def youtube_callback(code: str):
         credentials=credentials
     )
 
+
     channels = youtube.channels().list(
         part="snippet",
         mine=True
     ).execute()
 
-    if not channels["items"]:
+
+    if not channels.get("items"):
         raise HTTPException(
             status_code=400,
             detail="No YouTube channel found."
         )
 
+
     channel = channels["items"][0]
 
+
     db: Session = SessionLocal()
+
 
     account = db.query(
         YouTubeAccount
@@ -63,10 +96,15 @@ def youtube_callback(code: str):
         YouTubeAccount.google_id == channel["id"]
     ).first()
 
+
     if account:
 
         account.access_token = credentials.token
-        account.refresh_token = credentials.refresh_token or account.refresh_token
+
+        account.refresh_token = (
+            credentials.refresh_token
+            or account.refresh_token
+        )
 
     else:
 
@@ -84,10 +122,12 @@ def youtube_callback(code: str):
 
         db.add(account)
 
+
     db.commit()
     db.close()
 
+
     return {
         "message": "YouTube account connected successfully!",
-        "channel": channel["snippet"]["title"],
+        "channel": channel["snippet"]["title"]
     }
