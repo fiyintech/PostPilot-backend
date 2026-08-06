@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
+import os
 
 from app.database import SessionLocal
 from app.models import ScheduledPost
@@ -25,6 +26,22 @@ def get_db():
         db.close()
 
 
+VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm"
+}
+
+
+IMAGE_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp"
+}
+
 
 @router.post("/create")
 async def create_scheduled_post(
@@ -34,6 +51,47 @@ async def create_scheduled_post(
     scheduled_time: str = Form(...),
     db: Session = Depends(get_db)
 ):
+
+    # Get file extension
+
+    extension = os.path.splitext(
+        file.filename
+    )[1].lower()
+
+
+    # Platform media validation
+
+    if platform.lower() in [
+        "youtube",
+        "tiktok"
+    ]:
+
+        if extension not in VIDEO_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{platform} only supports video uploads"
+            )
+
+
+    elif platform.lower() == "instagram":
+
+        if (
+            extension not in VIDEO_EXTENSIONS
+            and extension not in IMAGE_EXTENSIONS
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Instagram only supports images and videos"
+            )
+
+
+    else:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported platform"
+        )
+
 
     # Create unique filename
 
