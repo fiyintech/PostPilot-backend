@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.database import engine, Base
 from app.models import ScheduledPost
 
+from app.routes import youtube
 from app.routes import posts
 from app.routes import upload
 
@@ -23,6 +24,8 @@ app.include_router(
 app.include_router(
     upload.router
 )
+
+app.include_router(youtube.router)
 
 @app.get("/")
 def home():
