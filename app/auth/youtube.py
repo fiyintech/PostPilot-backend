@@ -1,5 +1,4 @@
 import os
-
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
 
@@ -9,8 +8,10 @@ CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI")
 
+
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
     "openid",
@@ -18,6 +19,7 @@ SCOPES = [
 
 
 def create_flow():
+
     return Flow.from_client_config(
         {
             "web": {
