@@ -1,45 +1,75 @@
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from app.scheduler import process_scheduled_posts
 from app.database import engine, Base
-from app.models import ScheduledPost
 
 from app.routes import youtube
 from app.routes import posts
 from app.routes import upload
+from app.routes import youtube_upload
 
 
-Base.metadata.create_all(
-    bind=engine
-)
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
-    title="PostPilot API"
+    title="PostPilot API",
+    version="1.0.0"
 )
 
 
+# Session middleware for OAuth
 app.add_middleware(
     SessionMiddleware,
-    secret_key="postpilot-secret-key-change-later"
+    secret_key="postpilot-secret-key-change-this"
 )
 
 
-app.include_router(
-    posts.router
-)
+# Include routes
+app.include_router(youtube.router)
+app.include_router(posts.router)
+app.include_router(upload.router)
+app.include_router(youtube_upload.router)
 
-app.include_router(
-    upload.router
-)
 
-app.include_router(
-    youtube.router
-)
+
+# Scheduler
+scheduler = BackgroundScheduler()
+
+
+@app.on_event("startup")
+def startup_event():
+
+    scheduler.add_job(
+        process_scheduled_posts,
+        "interval",
+        seconds=30,
+        id="scheduled_posts_worker",
+        replace_existing=True
+    )
+
+    scheduler.start()
+
+    print("PostPilot scheduler started")
+
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+
+    scheduler.shutdown()
+
+    print("PostPilot scheduler stopped")
+
 
 
 @app.get("/")
-def home():
+def root():
+
     return {
-        "message": "PostPilot is running 🚀"
+        "message": "PostPilot backend running"
     }
