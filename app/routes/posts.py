@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
-import os
 
 from app.database import SessionLocal
 from app.models import ScheduledPost
@@ -26,22 +25,6 @@ def get_db():
         db.close()
 
 
-VIDEO_EXTENSIONS = {
-    ".mp4",
-    ".mov",
-    ".avi",
-    ".mkv",
-    ".webm"
-}
-
-
-IMAGE_EXTENSIONS = {
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp"
-}
-
 
 @router.post("/create")
 async def create_scheduled_post(
@@ -52,49 +35,6 @@ async def create_scheduled_post(
     db: Session = Depends(get_db)
 ):
 
-    # Get file extension
-
-    extension = os.path.splitext(
-        file.filename
-    )[1].lower()
-
-
-    # Platform media validation
-
-    if platform.lower() in [
-        "youtube",
-        "tiktok"
-    ]:
-
-        if extension not in VIDEO_EXTENSIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{platform} only supports video uploads"
-            )
-
-
-    elif platform.lower() == "instagram":
-
-        if (
-            extension not in VIDEO_EXTENSIONS
-            and extension not in IMAGE_EXTENSIONS
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Instagram only supports images and videos"
-            )
-
-
-    else:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported platform"
-        )
-
-
-    # Create unique filename
-
     filename = (
         str(uuid.uuid4())
         + "_"
@@ -102,15 +42,11 @@ async def create_scheduled_post(
     )
 
 
-    # Upload media
-
     media_url = upload_file(
         file.file,
         filename
     )
 
-
-    # Create database record
 
     post = ScheduledPost(
         media_url=media_url,
@@ -134,6 +70,8 @@ async def create_scheduled_post(
 
 
 
+
+
 @router.get("/")
 def get_posts(
     db: Session = Depends(get_db)
@@ -145,3 +83,101 @@ def get_posts(
 
 
     return posts
+
+
+
+
+
+@router.put("/{post_id}")
+def update_post(
+    post_id: int,
+    caption: str = Form(...),
+    scheduled_time: str = Form(...),
+    platform: str = Form(...),
+    db: Session = Depends(get_db)
+):
+
+    post = db.query(
+        ScheduledPost
+    ).filter(
+        ScheduledPost.id == post_id
+    ).first()
+
+
+    if not post:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
+
+
+
+    if post.status != "pending":
+
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending posts can be edited"
+        )
+
+
+
+    post.caption = caption
+
+    post.platform = platform
+
+    post.scheduled_time = datetime.fromisoformat(
+        scheduled_time
+    )
+
+
+    db.commit()
+
+    db.refresh(post)
+
+
+    return post
+
+
+
+
+
+@router.delete("/{post_id}")
+def delete_post(
+    post_id: int,
+    db: Session = Depends(get_db)
+):
+
+    post = db.query(
+        ScheduledPost
+    ).filter(
+        ScheduledPost.id == post_id
+    ).first()
+
+
+    if not post:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Post not found"
+        )
+
+
+
+    if post.status != "pending":
+
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending posts can be deleted"
+        )
+
+
+
+    db.delete(post)
+
+    db.commit()
+
+
+    return {
+        "message": "Post deleted successfully"
+    }
