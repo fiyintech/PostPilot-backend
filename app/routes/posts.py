@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlalchemy.orm import Session
 from datetime import datetime
 import uuid
+
+from pydantic import BaseModel
 
 from app.database import SessionLocal
 from app.models import ScheduledPost
@@ -12,6 +14,7 @@ router = APIRouter(
     prefix="/posts",
     tags=["Posts"]
 )
+
 
 
 def get_db():
@@ -26,37 +29,76 @@ def get_db():
 
 
 
+
+
+
+class UpdatePostRequest(BaseModel):
+
+    caption: str
+
+    scheduled_time: str
+
+    platform: str
+
+
+
+
+
+
 @router.post("/create")
 async def create_scheduled_post(
+
     file: UploadFile = File(...),
+
     caption: str = Form(...),
+
     platform: str = Form(...),
+
     scheduled_time: str = Form(...),
+
     db: Session = Depends(get_db)
+
 ):
 
+
     filename = (
+
         str(uuid.uuid4())
+
         + "_"
+
         + file.filename
+
     )
+
 
 
     media_url = upload_file(
+
         file.file,
+
         filename
+
     )
+
 
 
     post = ScheduledPost(
+
         media_url=media_url,
+
         caption=caption,
+
         platform=platform,
+
         scheduled_time=datetime.fromisoformat(
             scheduled_time
         ),
+
         status="pending"
+
     )
+
 
 
     db.add(post)
@@ -66,7 +108,9 @@ async def create_scheduled_post(
     db.refresh(post)
 
 
+
     return post
+
 
 
 
@@ -74,15 +118,17 @@ async def create_scheduled_post(
 
 @router.get("/")
 def get_posts(
+
     db: Session = Depends(get_db)
+
 ):
 
-    posts = db.query(
+
+    return db.query(
         ScheduledPost
     ).all()
 
 
-    return posts
 
 
 
@@ -90,12 +136,15 @@ def get_posts(
 
 @router.put("/{post_id}")
 def update_post(
+
     post_id: int,
-    caption: str = Form(...),
-    scheduled_time: str = Form(...),
-    platform: str = Form(...),
+
+    data: UpdatePostRequest,
+
     db: Session = Depends(get_db)
+
 ):
+
 
     post = db.query(
         ScheduledPost
@@ -104,11 +153,15 @@ def update_post(
     ).first()
 
 
+
     if not post:
 
         raise HTTPException(
+
             status_code=404,
+
             detail="Post not found"
+
         )
 
 
@@ -116,24 +169,33 @@ def update_post(
     if post.status != "pending":
 
         raise HTTPException(
+
             status_code=400,
+
             detail="Only pending posts can be edited"
+
         )
 
 
 
-    post.caption = caption
+    post.caption = data.caption
 
-    post.platform = platform
+
+    post.platform = data.platform
+
 
     post.scheduled_time = datetime.fromisoformat(
-        scheduled_time
+
+        data.scheduled_time
+
     )
+
 
 
     db.commit()
 
     db.refresh(post)
+
 
 
     return post
@@ -142,11 +204,17 @@ def update_post(
 
 
 
+
+
 @router.delete("/{post_id}")
 def delete_post(
+
     post_id: int,
+
     db: Session = Depends(get_db)
+
 ):
+
 
     post = db.query(
         ScheduledPost
@@ -155,11 +223,15 @@ def delete_post(
     ).first()
 
 
+
     if not post:
 
         raise HTTPException(
+
             status_code=404,
+
             detail="Post not found"
+
         )
 
 
@@ -167,8 +239,11 @@ def delete_post(
     if post.status != "pending":
 
         raise HTTPException(
+
             status_code=400,
+
             detail="Only pending posts can be deleted"
+
         )
 
 
@@ -178,6 +253,10 @@ def delete_post(
     db.commit()
 
 
+
     return {
-        "message": "Post deleted successfully"
+
+        "message":
+        "Post deleted successfully"
+
     }
